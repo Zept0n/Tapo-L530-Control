@@ -11,6 +11,7 @@ from pystray import MenuItem as item
 from PIL import Image
 from plugp100.api.tapo_client import TapoClient, AuthCredential
 from plugp100.api.light_device import LightDevice
+from functools import partial 
 
 # Define the exiting flag
 exiting = False
@@ -30,16 +31,13 @@ async def main():
 
     image = Image.open('light-bulb.png') # Load the icon image
 
-    # Create the system tray icon
-    icon = pystray.Icon('name', image, 'L530 Control')
-
     # Create the menu items
     menu = (
-        item('Exit', exit_action(icon, client)),
+        item('Exit', exit_action),  
     )
-    
-    # Assign the menu to the icon
-    icon.update_menu(menu)
+
+    # Create the system tray icon
+    icon = pystray.Icon('name', image, 'L530 Control',menu)
 
     try:
         # Create a separate thread for the system tray icon
@@ -54,7 +52,7 @@ async def main():
                 while not exiting:  # loop to continuously listen for commands
                     print("Listening...")
                     try:
-                        audio = r.listen(source, timeout=5, phrase_time_limit=3)  # Wrap in a try-except block
+                        audio = r.listen(source, timeout=15, phrase_time_limit=3)
                     except sr.WaitTimeoutError as e:
                         print(f"Timeout error: {e}")
                         continue  # Continue the loop when a timeout error occurs
@@ -73,37 +71,26 @@ async def main():
                             print("Google Speech Recognition could not understand audio")
                         except sr.RequestError as e:
                             print(f"Could not request results from Google Speech Recognition service; {e}")
-                        except pyaudio.paBadStreamPtr:
-                            # Ignore this exception if the program is exiting
-                            if not exiting:
-                                raise
+        
     except KeyboardInterrupt:
         exiting = True
         icon.stop()
     finally:
         icon.stop()
-
-def exit_action(icon, client):
-    global exiting
-    exiting = True
-    icon.stop()
-    # Clean up resources
+    
     try:
-        # Release the microphone
-        with sr.Microphone() as source:
-            source.stop_stream()
-            source.close()
-        print("Microphone released.")
-
         # Close the TapoClient connection
         if client:
-            client.close()
+            await client.close()
             print("TapoClient connection closed.")
-
     except Exception as e:
         print(f"Error during cleanup: {e}")
 
-    # Exit the script
+
+def exit_action(icon,item):
+    global exiting
+    exiting = True
+    icon.stop()
     sys.exit()
     
 
