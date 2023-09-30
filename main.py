@@ -15,6 +15,8 @@ from functools import partial
 
 # Define the exiting flag
 exiting = False
+state = False
+
 
 async def main():
     global exiting
@@ -28,16 +30,24 @@ async def main():
     light = LightDevice(client)
     toggle_light = create_toggle_light(light)  # Create the toggle_light function
     print('Initiliazing...')
+    print(loop)
     await toggle_light()
     await toggle_light()
+
+    async def toggle_light_wrapper():
+        await toggle_light()
+
+
     
     image = Image.open('light-bulb.png') # Load the icon image
 
     # Create the menu items
     menu = (
-        item('Toggle', toggle_light),
         item('Exit', exit_action),
+        item('Toggle', lambda icon, item: toggle_light_wrapper()),
     )
+
+
 
     # Create the system tray icon
     icon = pystray.Icon('name',image, 'L530 Control',menu)
@@ -51,7 +61,7 @@ async def main():
         # start listening for voice commands
         r = sr.Recognizer()
         with sr.Microphone() as source:
-                r.adjust_for_ambient_noise(source,duration=3) # ambient noise adjust
+                r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
                 while not exiting:  # loop to continuously listen for commands
                     print("Listening...")
                     try:
@@ -90,9 +100,6 @@ async def main():
             print("TapoClient connection closed.")
         except Exception as e:
             print(f"Error: {e}")
-        if client is not None and hasattr(client, 'invalidate'):
-            await client.close()
-            print("TapoClient connection closed.")
         icon.stop()
     finally:
         try:
@@ -101,21 +108,24 @@ async def main():
         except Exception as e:
             print(f"Error: {e}")
         # Close the TapoClient connection
-        if client is not None and hasattr(client, 'invalidate'):
-            await client.close()
-            print("TapoClient connection closed.")
         icon.stop()
 
 
 def exit_action(icon,item):
     global exiting
     exiting = True
-    icon.stop()
+    try:
+        icon.stop()
+        sys.exit()
+    except Exception as e:
+        print(f"Error: {e}")
+    except SystemExit:
+        pass
     
 def create_toggle_light(light):
     light_state = False
-    light=light
     async def toggle_light():
+        print('toggling light1')
         nonlocal light_state
         # Toggle the light state
         if light_state:
@@ -127,7 +137,14 @@ def create_toggle_light(light):
 
         time.sleep(2)  # Add a 2-second delay between toggles (you can adjust the delay as needed)
 
+    def toggle_light_sync():
+        print('toggling light2')
+        future = asyncio.run_coroutine_threadsafe(toggle_light(), loop)
+        # Wait for the Future to complete
+        future.result()
+
     return toggle_light
+
 
 
 if __name__ == "__main__":
