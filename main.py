@@ -21,18 +21,41 @@ class LightControl:
         self.password=password
         self.ip=ip
 
-    async def run(self):
+    async def login(self):
         # create generic tapo api
         credential = AuthCredential(self.username, self.password)
-        client = await TapoClient.connect(credential, self.ip)
-        self.light = LightDevice(client)
-        print('Loading...')
+        self.client = await TapoClient.connect(credential, self.ip)
+        self.light = LightDevice(self.client)
         responce = await self.light.get_state()
         self.state = responce.value.device_on
         self.name = responce.value.info.nickname
 
-        #toggle_light = await self.create_toggle_light(light)  # Create the toggle_light function
         
+    async def run(self):
+        try:
+            self._tray_icon()
+            await self.listen()
+        except Exception as e:
+            print(f"Error: {e}")
+            try:
+                # Close the TapoClient connection
+                await self.client.close()
+                print("TapoClient connection closed.")
+            except Exception as e:
+                print(f"Error: {e}")
+            # Close the tray app
+            self.icon.stop()
+        finally:
+            try:
+                await self.client.close()
+                print("TapoClient connection closed.")
+            except Exception as e:
+                print(f"Error: {e}")
+            self.icon.stop()
+
+
+
+    def _tray_icon(self):
         image = Image.open('light-bulb.png') # Load the icon image
 
         #TODO create toggle menu item - problem with async functions
@@ -41,34 +64,14 @@ class LightControl:
             item('Exit', self.exit_action),
         )
 
-
         # Create the system tray icon
         icon = pystray.Icon('name',image, 'L530 Control',menu)
 
+        self.icon = icon
         # Create a separate thread for the system tray icon
-        icon_thread = threading.Thread(target=icon.run)
+        icon_thread = threading.Thread(target=self.icon.run)
         icon_thread.daemon = True
         icon_thread.start()
-
-        try:
-            await self.listen()
-        except Exception as e:
-            print(f"Error: {e}")
-            try:
-                # Close the TapoClient connection
-                await client.close()
-                print("TapoClient connection closed.")
-            except Exception as e:
-                print(f"Error: {e}")
-            # Close the tray app
-            icon.stop()
-        finally:
-            try:
-                await client.close()
-                print("TapoClient connection closed.")
-            except Exception as e:
-                print(f"Error: {e}")
-            icon.stop()
 
     async def listen(self):
         # start listening for voice commands
@@ -110,7 +113,7 @@ class LightControl:
     def exit_action(self,icon,item):
         self.exiting = True
         try:
-            icon.stop()
+            self.icon.stop()
             sys.exit()
         except Exception as e:
             print(f"Error: {e}")
@@ -135,9 +138,10 @@ if __name__ == "__main__":
     light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
     loop = asyncio.new_event_loop()
     try:
+        loop.run_until_complete(light_control.login())
         loop.run_until_complete(light_control.run())
     except KeyboardInterrupt:
-        exiting = True
+        print('Exiting')
     finally:
         loop.run_until_complete(asyncio.sleep(0.1))
         loop.close()
