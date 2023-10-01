@@ -12,6 +12,7 @@ from PIL import Image
 from plugp100.api.tapo_client import TapoClient, AuthCredential
 from plugp100.api.light_device import LightDevice
 from functools import partial 
+import concurrent.futures
 
 # Define the exiting flag
 exiting = False
@@ -19,7 +20,6 @@ state = False
 
 
 async def main():
-    global exiting
     # create generic tapo api
     username = config.USERNAME
     password = config.PASSWORD
@@ -28,78 +28,37 @@ async def main():
     credential = AuthCredential(username, password)
     client = await TapoClient.connect(credential, ip)
     light = LightDevice(client)
-    toggle_light = create_toggle_light(light)  # Create the toggle_light function
-    print('Initiliazing...')
-    print(loop)
-    await toggle_light()
-    await toggle_light()
-
-    async def toggle_light_wrapper():
-        await toggle_light()
-
-
+    print('Loading...')
+    toggle_light = await create_toggle_light(light)  # Create the toggle_light function
     
     image = Image.open('light-bulb.png') # Load the icon image
 
+    #TODO create toggle menu item - problem with async functions
     # Create the menu items
     menu = (
         item('Exit', exit_action),
-        item('Toggle', lambda icon, item: toggle_light_wrapper()),
     )
-
 
 
     # Create the system tray icon
     icon = pystray.Icon('name',image, 'L530 Control',menu)
 
+    # Create a separate thread for the system tray icon
+    icon_thread = threading.Thread(target=icon.run)
+    icon_thread.daemon = True
+    icon_thread.start()
+
     try:
-        # Create a separate thread for the system tray icon
-        icon_thread = threading.Thread(target=icon.run)
-        icon_thread.daemon = True
-        icon_thread.start()
-
-        # start listening for voice commands
-        r = sr.Recognizer()
-        with sr.Microphone() as source:
-                r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
-                while not exiting:  # loop to continuously listen for commands
-                    print("Listening...")
-                    try:
-                        audio = r.listen(source, timeout=6, phrase_time_limit=3)
-                    except sr.WaitTimeoutError as e:
-                        print(f"Timeout error: {e}")
-                        continue  # Continue the loop when a timeout error occurs
-
-                    if audio:
-                        try:
-                            command = r.recognize_google(audio).lower()
-                            print(f"You said: {command}")
-
-                            if "white" in command:
-                                await toggle_light()
-                            elif "light" in command:
-                                await toggle_light()
-                            elif "turn on" in command:
-                                await light.on()
-                            elif "turn off" in command:
-                                await light.off()
-
-                        except sr.UnknownValueError:
-                            print("Google Speech Recognition could not understand audio")
-                        except sr.RequestError as e:
-                            print(f"Could not request results from Google Speech Recognition service; {e}")
-                        except pyaudio.paBadStreamPtr:
-                            # Ignore this exception if the program is exiting
-                            if not exiting:
-                                raise
-        
+        await listen(light,toggle_light)
     except Exception as e:
         print(f"Error: {e}")
         try:
+            # Close the TapoClient connection
             await client.close()
             print("TapoClient connection closed.")
         except Exception as e:
             print(f"Error: {e}")
+        # Close the tray app
         icon.stop()
     finally:
         try:
@@ -107,9 +66,44 @@ async def main():
             print("TapoClient connection closed.")
         except Exception as e:
             print(f"Error: {e}")
-        # Close the TapoClient connection
         icon.stop()
 
+async def listen(light,toggle_light):
+    global exiting
+    # start listening for voice commands
+    r = sr.Recognizer()
+    m= sr.Microphone()
+    with m as source:
+            r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
+            while not exiting:  # loop to continuously listen for commands
+                print("Listening...")
+                try:
+                    audio = r.listen(source, phrase_time_limit=3)
+                except sr.WaitTimeoutError as e:
+                    print(f"Timeout error: {e}")
+                    continue  # Continue the loop when a timeout error occurs
+
+                if audio:
+                    try:
+                        commands = ["white", "light", "toggle", "lamp", "night"]
+                        command = r.recognize_google(audio).lower()
+                        print(f"You said: {command}")
+
+                        if any(word in command for word in commands):
+                            await toggle_light()
+                        elif "turn on" in command:
+                            await light.on()
+                        elif "turn off" in command:
+                            await light.off()
+
+                    except sr.UnknownValueError:
+                        print("Google Speech Recognition could not understand audio")
+                    except sr.RequestError as e:
+                        print(f"Could not request results from Google Speech Recognition service; {e}")
+                    except pyaudio.paBadStreamPtr:
+                        # Ignore this exception if the program is exiting
+                        if not exiting:
+                            raise
 
 def exit_action(icon,item):
     global exiting
@@ -122,10 +116,12 @@ def exit_action(icon,item):
     except SystemExit:
         pass
     
-def create_toggle_light(light):
-    light_state = False
+async def create_toggle_light(light):
+    responce = await light.get_state()
+    light_state = responce.value.device_on
+    light_name = responce.value.info.nickname
     async def toggle_light():
-        print('toggling light1')
+        print(f'Toggling {light_name}')
         nonlocal light_state
         # Toggle the light state
         if light_state:
@@ -135,16 +131,8 @@ def create_toggle_light(light):
             await light.on()
             light_state = True
 
-        time.sleep(2)  # Add a 2-second delay between toggles (you can adjust the delay as needed)
-
-    def toggle_light_sync():
-        print('toggling light2')
-        future = asyncio.run_coroutine_threadsafe(toggle_light(), loop)
-        # Wait for the Future to complete
-        future.result()
-
+        time.sleep(2)  # Add a 2-second delay between toggles 
     return toggle_light
-
 
 
 if __name__ == "__main__":
