@@ -20,6 +20,7 @@ class LightControl:
         self.username=username
         self.password=password
         self.ip=ip
+        self.loop = None
 
     async def login(self):
         # create generic tapo api
@@ -33,26 +34,27 @@ class LightControl:
         
     async def run(self):
         try:
+            self.loop = asyncio.get_running_loop()
             self._tray_icon()
-            await self.listen()
+            listen_thread = threading.Thread(target=self.listen)
+            listen_thread.start()
+            while listen_thread.is_alive():
+                await asyncio.sleep(0.1)  # Sleep for a short time to avoid busy waiting
         except Exception as e:
             print(f"Error: {e}")
-            try:
-                # Close the TapoClient connection
-                await self.client.close()
-                print("TapoClient connection closed.")
-            except Exception as e:
-                print(f"Error: {e}")
-            # Close the tray app
-            self.icon.stop()
+            await self._cleanup()
         finally:
-            try:
-                await self.client.close()
-                print("TapoClient connection closed.")
-            except Exception as e:
-                print(f"Error: {e}")
-            self.icon.stop()
+            await self._cleanup()
 
+    async def _cleanup(self):
+        try:
+            # Close the TapoClient connection
+            await self.client.close()
+            print("TapoClient connection closed.")
+        except Exception as e:
+            print("Error closing TapoClient connection")
+        # Close the tray app
+        self.icon.stop()
 
 
     def _tray_icon(self):
@@ -61,6 +63,7 @@ class LightControl:
         #TODO create toggle menu item - problem with async functions
         # Create the menu items
         menu = (
+            item('Toggle',self.toggle_light_wrapper),
             item('Exit', self.exit_action),
         )
 
@@ -73,7 +76,10 @@ class LightControl:
         icon_thread.daemon = True
         icon_thread.start()
 
-    async def listen(self):
+    def listen(self):
+        asyncio.run(self.listen_coroutine())
+
+    async def listen_coroutine(self):
         # start listening for voice commands
         r = sr.Recognizer()
         m= sr.Microphone()
@@ -95,11 +101,11 @@ class LightControl:
 
                             #TODO Implement commands for color and brightness
                             if any(word in command for word in commands):
-                                await self.toggle_light()
+                                asyncio.run_coroutine_threadsafe(self.toggle_light(), self.loop)
                             elif "turn on" in command:
-                                await self.light.on()
+                                asyncio.run_coroutine_threadsafe(self.light.on(), self.loop)
                             elif "turn off" in command:
-                                await self.light.off()
+                                asyncio.run_coroutine_threadsafe(self.light.off(), self.loop)
 
                         except sr.UnknownValueError:
                             print("Google Speech Recognition could not understand audio")
@@ -109,6 +115,7 @@ class LightControl:
                             # Ignore this exception if the program is exiting
                             if not self.exiting:
                                 raise
+                    await asyncio.sleep(0)
 
     def exit_action(self,icon,item):
         self.exiting = True
@@ -120,6 +127,9 @@ class LightControl:
         except SystemExit:
             pass
         
+    
+    def toggle_light_wrapper(self,icon,item):
+        asyncio.run_coroutine_threadsafe(self.toggle_light(), self.loop)
 
     async def toggle_light(self):
         print(f'Toggling {self.name}')
@@ -131,20 +141,20 @@ class LightControl:
             await self.light.on()
             self.state = True
 
-        time.sleep(2)  # Add a 2-second delay between toggles 
+        await asyncio.sleep(2)  # Add a 2-second delay between toggles 
+
+
+async def main():
+    light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
+    await light_control.login()
+    await light_control.run()
 
 
 if __name__ == "__main__":
-    light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
-    loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(light_control.login())
-        loop.run_until_complete(light_control.run())
+        asyncio.run(main())
     except KeyboardInterrupt:
         print('Exiting')
-    finally:
-        loop.run_until_complete(asyncio.sleep(0.1))
-        loop.close()
 
 
         
