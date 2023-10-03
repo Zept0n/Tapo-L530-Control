@@ -47,18 +47,23 @@ class LightControl:
             await self._cleanup()
 
     async def _cleanup(self):
+        self.exiting=True
+        # Close the TapoClient connection
+        await self.close_client()
+        # Close the tray app
+        self.icon.stop()
+
+    async def close_client(self):
         try:
             # Close the TapoClient connection
             await self.client.close()
             print("TapoClient connection closed.")
         except Exception as e:
             print("Error closing TapoClient connection")
-        # Close the tray app
-        self.icon.stop()
 
 
     def _tray_icon(self):
-        image = Image.open('light-bulb.png') # Load the icon image
+        image = Image.open('favicon.ico') # Load the icon image
 
         #TODO create toggle menu item - problem with async functions
         # Create the menu items
@@ -80,42 +85,45 @@ class LightControl:
         asyncio.run(self.listen_coroutine())
 
     async def listen_coroutine(self):
-        # start listening for voice commands
-        r = sr.Recognizer()
-        m= sr.Microphone()
-        with m as source:
-                r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
-                while not self.exiting:  # loop to continuously listen for commands
-                    print("Listening...")
-                    try:
-                        audio = r.listen(source, phrase_time_limit=3)
-                    except sr.WaitTimeoutError as e:
-                        print(f"Timeout error: {e}")
-                        continue  # Continue the loop when a timeout error occurs
-
-                    if audio:
+        try:
+            # start listening for voice commands
+            r = sr.Recognizer()
+            m= sr.Microphone()
+            with m as source:
+                    r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
+                    while not self.exiting:  # loop to continuously listen for commands
+                        print("Listening...")
                         try:
-                            commands = ["white", "light", "toggle", "lamp", "night"]
-                            command = r.recognize_google(audio).lower()
-                            print(f"You said: {command}")
+                            audio = r.listen(source, phrase_time_limit=3)
+                        except sr.WaitTimeoutError as e:
+                            print(f"Timeout error: {e}")
+                            continue  # Continue the loop when a timeout error occurs
 
-                            #TODO Implement commands for color and brightness
-                            if any(word in command for word in commands):
-                                asyncio.run_coroutine_threadsafe(self.toggle_light(), self.loop)
-                            elif "turn on" in command:
-                                asyncio.run_coroutine_threadsafe(self.light.on(), self.loop)
-                            elif "turn off" in command:
-                                asyncio.run_coroutine_threadsafe(self.light.off(), self.loop)
+                        if audio:
+                            try:
+                                commands = ["white", "light", "toggle", "lamp", "night"]
+                                command = r.recognize_google(audio).lower()
+                                print(f"You said: {command}")
 
-                        except sr.UnknownValueError:
-                            print("Google Speech Recognition could not understand audio")
-                        except sr.RequestError as e:
-                            print(f"Could not request results from Google Speech Recognition service; {e}")
-                        except pyaudio.paBadStreamPtr:
-                            # Ignore this exception if the program is exiting
-                            if not self.exiting:
-                                raise
-                    await asyncio.sleep(0)
+                                #TODO Implement commands for color and brightness
+                                if any(word in command for word in commands):
+                                    asyncio.run_coroutine_threadsafe(self.toggle_light(), self.loop)
+                                elif "turn on" in command:
+                                    self._run_command(self.light.on)
+                                elif "turn off" in command:
+                                    self._run_command(self.light.off)
+
+                            except sr.UnknownValueError:
+                                print("Google Speech Recognition could not understand audio")
+                            except sr.RequestError as e:
+                                print(f"Could not request results from Google Speech Recognition service; {e}")
+                            except pyaudio.paBadStreamPtr:
+                                # Ignore this exception if the program is exiting
+                                if not self.exiting:
+                                    raise
+                        await asyncio.sleep(0)
+        except Exception as e:
+            sys.exit()
 
     def exit_action(self,icon,item):
         self.exiting = True
@@ -127,7 +135,9 @@ class LightControl:
         except SystemExit:
             pass
         
-    
+    def _run_command(self,command):
+        asyncio.run_coroutine_threadsafe(command(), self.loop)
+
     def toggle_light_wrapper(self,icon,item):
         asyncio.run_coroutine_threadsafe(self.toggle_light(), self.loop)
 
@@ -149,19 +159,11 @@ async def main():
     await light_control.login()
     await light_control.run()
 
-
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print('Exiting')
+        sys.exit()
 
 
-        
-    
-
-    
-
-    
-
-    
