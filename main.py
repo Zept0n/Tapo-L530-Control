@@ -11,7 +11,9 @@ from pystray import MenuItem as item
 from PIL import Image
 from plugp100.api.tapo_client import TapoClient, AuthCredential
 from plugp100.api.light_device import LightDevice
-from functools import partial 
+from functools import partial
+import importlib
+
 
 class LightControl:
     def __init__(self,username,password,ip):
@@ -155,9 +157,18 @@ class LightControl:
 
 
 async def main():
-    light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
-    await light_control.login()
-    await light_control.run()
+    importlib.reload(config)
+    try:
+        light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
+        await light_control.login()
+    except Exception as e:
+        print(f"Login failed ${e}")
+        sys.exit()
+    try:
+        await light_control.run()
+    except Exception as e:
+        print(f"Run failed ${e}")
+        sys.exit()
 
 if __name__ == "__main__":
     try:
