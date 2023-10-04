@@ -1,17 +1,15 @@
 import asyncio
 import os
-import time
 import threading
 import sys
 import speech_recognition as sr
 import pyaudio
-import config
 import pystray
 from pystray import MenuItem as item
 from PIL import Image
 from plugp100.api.tapo_client import TapoClient, AuthCredential
 from plugp100.api.light_device import LightDevice
-from functools import partial 
+
 
 class LightControl:
     def __init__(self,username,password,ip):
@@ -61,9 +59,8 @@ class LightControl:
         except Exception as e:
             print("Error closing TapoClient connection")
 
-
     def _tray_icon(self):
-        image = Image.open('favicon.ico') # Load the icon image
+        image = Image.open('assets/favicon.ico') # Load the icon image
 
         #TODO create toggle menu item - problem with async functions
         # Create the menu items
@@ -134,6 +131,7 @@ class LightControl:
             print(f"Error: {e}")
         except SystemExit:
             pass
+    
         
     def _run_command(self,command):
         asyncio.run_coroutine_threadsafe(command(), self.loop)
@@ -152,18 +150,3 @@ class LightControl:
             self.state = True
 
         await asyncio.sleep(2)  # Add a 2-second delay between toggles 
-
-
-async def main():
-    light_control = LightControl(config.USERNAME,config.PASSWORD,config.IP)
-    await light_control.login()
-    await light_control.run()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print('Exiting')
-        sys.exit()
-
-

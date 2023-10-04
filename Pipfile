@@ -8,6 +8,7 @@ plugp100 = "*"
 speechrecognition = "*"
 pyaudio = "*"
 pystray = "*"
+pysimplegui = "*"
 
 [dev-packages]
 
