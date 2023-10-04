@@ -36,8 +36,8 @@ class LightControl:
             self._tray_icon()
             listen_thread = threading.Thread(target=self.listen)
             listen_thread.start()
-            while listen_thread.is_alive():
-                await asyncio.sleep(0.1)  # Sleep for a short time to avoid busy waiting
+            while listen_thread.is_alive(): 
+                await asyncio.sleep(0)  # Sleep for a short time to avoid busy waiting
         except Exception as e:
             print(f"Error: {e}")
             await self._cleanup()

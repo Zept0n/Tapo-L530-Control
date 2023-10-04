@@ -1,7 +1,7 @@
 import importlib
-import src.config as config
+import config as config
 import asyncio
-from src.light_control import LightControl
+from light_control import LightControl
 
 async def main():
     importlib.reload(config)

@@ -1,10 +1,10 @@
 # gui.py
 import PySimpleGUI as sg
 import os
-import src.config as config
+import config as config
 import asyncio
 from threading import Thread
-import src.main as main
+import main as main
 
 def start():
     layout = [
