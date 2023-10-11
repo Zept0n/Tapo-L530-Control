@@ -23,7 +23,7 @@ def start():
         if event == sg.WINDOW_CLOSED:
             break
         elif event == 'Save':
-            with open('config.py', 'w') as configfile:
+            with open('.\src\config.py', 'w') as configfile:
                 configfile.write(f"USERNAME = '{values['-USERNAME-']}'\n")
                 configfile.write(f"PASSWORD = '{values['-PASSWORD-']}'\n")
                 configfile.write(f"IP = '{values['-IP-']}'\n")
@@ -34,7 +34,7 @@ def start():
             Thread(target=asyncio.run, args=(main.main(),)).start()
             break
         elif event == 'Clear Config':
-            with open('config.py', 'w') as configfile:
+            with open('.\src\config.py', 'w') as configfile:
                 configfile.write("USERNAME = ''\n")
                 configfile.write("PASSWORD = ''\n")
                 configfile.write("IP = ''\n")
