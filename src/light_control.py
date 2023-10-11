@@ -86,10 +86,10 @@ class LightControl:
             # start listening for voice commands
             r = sr.Recognizer()
             m= sr.Microphone()
+            print("Listening...")
             with m as source:
                     r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
                     while not self.exiting:  # loop to continuously listen for commands
-                        print("Listening...")
                         try:
                             audio = r.listen(source, phrase_time_limit=3)
                         except sr.WaitTimeoutError as e:
@@ -111,7 +111,8 @@ class LightControl:
                                     self._run_command(self.light.off)
 
                             except sr.UnknownValueError:
-                                print("Google Speech Recognition could not understand audio")
+                                await asyncio.sleep(0)
+                                #print("Google Speech Recognition could not understand audio")
                             except sr.RequestError as e:
                                 print(f"Could not request results from Google Speech Recognition service; {e}")
                             except pyaudio.paBadStreamPtr:
