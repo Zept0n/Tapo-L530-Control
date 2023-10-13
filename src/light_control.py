@@ -81,7 +81,7 @@ class LightControl:
         icon_thread.start() 
 
     def listen(self):
-        threading.Thread(target=asyncio.run, args=(self.listen_coroutine(),)).start()
+        threading.Thread(target=asyncio.run, daemon=True, args=(self.listen_coroutine(),)).start()
 
     async def listen_coroutine(self):
         self.listen_loop_running=True
@@ -91,7 +91,7 @@ class LightControl:
             m= sr.Microphone()
             print("Listening...")
             with m as source:
-                    r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
+                    r.adjust_for_ambient_noise(source,duration=2) # ambient noise adjust
                     while self.listen_loop_running:  # loop to continuously listen for commands
                         try:
                             audio = r.listen(source, phrase_time_limit=3)
