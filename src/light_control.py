@@ -19,6 +19,7 @@ class LightControl:
         self.password=password
         self.ip=ip
         self.loop = None
+        self.listen_loop_running=False
 
     async def login(self):
         # create generic tapo api
@@ -33,10 +34,9 @@ class LightControl:
     async def run(self):
         try:
             self.loop = asyncio.get_running_loop()
+            self.listen()
             self._tray_icon()
-            listen_thread = threading.Thread(target=self.listen)
-            listen_thread.start()
-            while listen_thread.is_alive(): 
+            while not self.exiting: # Main thread loop to keep swapping between voice control commands and tray icon commands
                 await asyncio.sleep(0)  # Sleep for a short time to avoid busy waiting
         except Exception as e:
             print(f"Error: {e}")
@@ -46,6 +46,7 @@ class LightControl:
 
     async def _cleanup(self):
         self.exiting=True
+        self.listen_loop_running=False
         # Close the TapoClient connection
         await self.close_client()
         # Close the tray app
@@ -65,6 +66,7 @@ class LightControl:
         #TODO create toggle menu item - problem with async functions
         # Create the menu items
         menu = (
+            item('Toggle Voice Control',self.toggle_listen),
             item('Toggle',self.toggle_light_wrapper),
             item('Exit', self.exit_action),
         )
@@ -76,20 +78,21 @@ class LightControl:
         # Create a separate thread for the system tray icon
         icon_thread = threading.Thread(target=self.icon.run)
         icon_thread.daemon = True
-        icon_thread.start()
+        icon_thread.start() 
 
     def listen(self):
-        asyncio.run(self.listen_coroutine())
+        threading.Thread(target=asyncio.run, daemon=True, args=(self.listen_coroutine(),)).start()
 
     async def listen_coroutine(self):
+        self.listen_loop_running=True
         try:
             # start listening for voice commands
             r = sr.Recognizer()
             m= sr.Microphone()
             print("Listening...")
             with m as source:
-                    r.adjust_for_ambient_noise(source,duration=1) # ambient noise adjust
-                    while not self.exiting:  # loop to continuously listen for commands
+                    r.adjust_for_ambient_noise(source,duration=2) # ambient noise adjust
+                    while self.listen_loop_running:  # loop to continuously listen for commands
                         try:
                             audio = r.listen(source, phrase_time_limit=3)
                         except sr.WaitTimeoutError as e:
@@ -125,6 +128,7 @@ class LightControl:
 
     def exit_action(self,icon,item):
         self.exiting = True
+        self.listen_loop_running=False
         try:
             self.icon.stop()
             sys.exit()
@@ -151,3 +155,12 @@ class LightControl:
             self.state = True
 
         await asyncio.sleep(2)  # Add a 2-second delay between toggles 
+    
+    def toggle_listen(self):
+        if self.listen_loop_running:
+            print('Turning Voice Control off...')
+            self.listen_loop_running=False
+        else:
+            print('Turning Voice Control on...')
+            self.listen_loop_running=True
+            self.listen()
